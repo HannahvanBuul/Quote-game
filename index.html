@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Teamweekend Quote Game</title>
+<meta name="theme-color" content="#6a0091">
+<link rel="icon" href="logo.png">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+</head>
+<body>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one-column phone app — club-purple header with white stripe, bingo grid of quote squares, heart stamps mark what you heard */
+:root{
+  --paper:#f8f3fd; --card:#ffffff; --ink:#2b0f3d; --muted:#76628a; --line:#e7dbf3;
+  --club:#6a0091; --club-ink:#ffffff; --yellow:#ffffff; --lilac:#e3c8f7;
+  --dauber:#d04a9f; --dauber-soft:#fbe4f3; --good:#2f8f5b; --bad:#c43c6a; --hilite:#e3c8f7;
+  --display:"Fredoka","Baloo 2",system-ui,sans-serif;
+  --body:"Nunito",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#170a21; --card:#22122f; --ink:#f3eafb; --muted:#b39fc6; --line:#3b2550;
+  --club:#55007a; --club-ink:#ffffff; --yellow:#ffffff; --lilac:#d9b8f2;
+  --dauber:#ef6fbd; --dauber-soft:#43173a; --good:#5cc98d; --bad:#f07a9f; --hilite:#d9b8f2; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#170a21; --card:#22122f; --ink:#f3eafb; --muted:#b39fc6; --line:#3b2550;
+  --club:#55007a; --club-ink:#ffffff; --yellow:#ffffff; --lilac:#d9b8f2;
+  --dauber:#ef6fbd; --dauber-soft:#43173a; --good:#5cc98d; --bad:#f07a9f; --hilite:#d9b8f2; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--club)}
+.wrap{max-width:720px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--club);color:var(--club-ink);border-bottom:5px solid var(--yellow)}
+header .wrap{padding-block:14px 0;display:flex;flex-direction:column;gap:10px}
+.brand{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-family:var(--display);font-weight:700;font-size:1.6rem;letter-spacing:.01em;display:flex;align-items:center;gap:8px;margin:0;line-height:1.1;text-wrap:balance}
+h1 span{color:var(--lilac)}
+h1{font-size:1.35rem}
+.brandmark{display:flex;align-items:center;gap:12px;min-width:0}
+.brandmark img{width:52px;height:52px;flex:none;filter:drop-shadow(0 2px 4px rgb(0 0 0 / .25))}
+.club{font:600 .7rem var(--body);letter-spacing:.1em;text-transform:uppercase;opacity:.85}
+.who{font-size:.85rem;opacity:.85}
+.who button{all:unset;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+nav{display:flex;gap:4px;overflow-x:auto}
+nav button{flex:1;min-width:max-content;border:0;background:transparent;color:var(--club-ink);opacity:.7;font:600 .9rem var(--body);padding:10px 12px;border-bottom:3px solid transparent;cursor:pointer}
+nav button[aria-selected="true"]{opacity:1;border-bottom-color:var(--yellow)}
+nav button:focus-visible{outline-color:#fff}
+nav button:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--dauber);outline-offset:2px}
+main .wrap{padding-block:20px 48px;display:flex;flex-direction:column;gap:20px}
+h2{font-family:var(--display);font-weight:600;font-size:1.2rem;margin:0;text-wrap:balance}
+.lede{color:var(--muted);margin:4px 0 0;max-width:60ch}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dauber);font-weight:800}
+.notice{background:var(--dauber-soft);border-radius:10px;padding:12px 14px;font-size:.9rem}
+.empty{border:2px dashed var(--line);border-radius:12px;padding:24px 18px;text-align:center;color:var(--muted);display:flex;flex-direction:column;gap:10px;align-items:center}
+
+/* bingo grid */
+.progress{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.progress b{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+@media (max-width:420px){.grid{grid-template-columns:1fr 1fr}}
+.sq{position:relative;min-height:112px;background:var(--card);border:2px solid var(--line);border-radius:18px;padding:12px;text-align:left;font:600 .92rem/1.3 var(--body);color:var(--ink);cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;gap:8px;overflow:hidden}
+.sq:hover{border-color:var(--dauber)}
+.sq q{quotes:"“" "”"}
+.sq .meta{font:500 .72rem var(--mono);color:var(--muted);position:relative;z-index:1}
+.sq.hit{border-color:var(--dauber);background:linear-gradient(160deg,var(--card) 55%,var(--dauber-soft))}
+.sq.hit::before{content:"";position:absolute;right:-4px;bottom:-6px;width:64px;height:58px;background:var(--dauber);opacity:.9;transform:rotate(-12deg);clip-path:path('M32 56 C10 40 0 28 0 16 C0 6 8 0 17 0 C24 0 29 4 32 9 C35 4 40 0 47 0 C56 0 64 6 64 16 C64 28 54 40 32 56 Z')}
+.sq.hit::after{content:attr(data-initials);position:absolute;right:-4px;bottom:2px;width:64px;height:44px;color:#fff;font:700 1.05rem var(--display);display:grid;place-items:center;transform:rotate(-12deg)}
+.sq.hit .meta{color:var(--dauber);font-weight:500;padding-right:56px}
+
+/* ranking */
+.board{display:flex;flex-direction:column;background:var(--card);border:2px solid var(--line);border-radius:18px;overflow:hidden}
+.row{display:grid;grid-template-columns:2.2rem 1fr auto auto auto;gap:10px;align-items:center;padding:12px 14px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.row.head{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;padding-block:8px}
+.pos{font:700 1.15rem var(--display);color:var(--muted)}
+.row.top1 .pos{color:var(--club)}
+.row.top1{background:linear-gradient(90deg,color-mix(in srgb,var(--lilac) 45%,transparent),transparent)}
+.name{font-weight:700;min-width:0;overflow-wrap:anywhere}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;min-width:2.6rem}
+.plus{color:var(--good)} .min{color:var(--bad)}
+.total{font:700 1.1rem var(--display);font-variant-numeric:tabular-nums;text-align:right;min-width:2.6rem}
+.me-row{background:var(--dauber-soft)}
+
+/* log */
+.log{display:flex;flex-direction:column;gap:8px;list-style:none;margin:0;padding:0}
+.log li{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;grid-template-columns:auto 1fr;gap:4px 12px}
+.log time{font:500 .78rem var(--mono);color:var(--muted);grid-row:span 2;padding-top:2px}
+.log .q{font-weight:600}
+.log .s{font-size:.85rem;color:var(--muted)}
+
+/* forms */
+.panel{background:var(--card);border:2px solid var(--line);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.inline{display:flex;gap:8px;flex-wrap:wrap}
+.inline input{flex:1 1 200px;min-width:0}
+input,select{font:500 1rem var(--body);color:var(--ink);background:var(--paper);border:1.5px solid var(--line);border-radius:8px;padding:10px 12px;width:100%}
+.inline input{width:auto}
+label{font-weight:600;font-size:.88rem;display:flex;flex-direction:column;gap:6px}
+.btn{font:800 .95rem var(--body);border:0;border-radius:999px;padding:10px 18px;cursor:pointer;background:var(--club);color:var(--club-ink)}
+.btn.primary{background:var(--dauber);color:#fff}
+.btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+.btn.danger{background:transparent;color:var(--bad);border:1.5px solid var(--bad)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.chips{display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:0;padding:0}
+.chips li{display:flex;align-items:center;gap:6px;background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:4px 6px 4px 12px;font-weight:600;font-size:.9rem;max-width:100%}
+.chips li span{overflow-wrap:anywhere}
+.chips button{all:unset;cursor:pointer;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:var(--muted)}
+.chips button:hover{background:var(--dauber-soft);color:var(--dauber)}
+.qlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.qlist li{display:flex;gap:8px;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding:6px 0}
+.qlist li span{min-width:0;overflow-wrap:anywhere}
+.small{font-size:.82rem;color:var(--muted)}
+
+/* sheet */
+.sheet{position:fixed;inset:0;z-index:20;background:rgb(10 20 18 / .55);display:flex;align-items:flex-end;justify-content:center}
+.sheet .box{background:var(--card);width:100%;max-width:520px;border-radius:22px 22px 0 0;border-top:5px solid var(--yellow);padding:20px max(16px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:14px;max-height:90%;overflow:auto}
+@media (min-width:600px){.sheet{align-items:center}.sheet .box{border-radius:22px}}
+.sheet blockquote{margin:0;font:600 1.2rem/1.3 var(--display)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:380px){.row2{grid-template-columns:1fr}}
+.actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.err{color:var(--bad);font-size:.88rem;margin:0}
+footer .wrap{padding-block:0 32px;display:flex;justify-content:center}
+.linkbtn{all:unset;cursor:pointer;color:var(--muted);font-size:.82rem;text-decoration:underline;text-underline-offset:3px}
+.linkbtn:focus-visible{outline:2px solid var(--dauber);outline-offset:2px}
+.badge{display:inline-block;background:var(--lilac);color:var(--club);font:800 .7rem var(--body);letter-spacing:.06em;text-transform:uppercase;border-radius:999px;padding:2px 8px;margin-left:6px}
+
+/* ---- interactie ---- */
+#confetti{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:40}
+.sq{transition:transform .15s ease,box-shadow .15s ease,border-color .15s}
+.sq:not(.hit):hover{transform:translateY(-3px);box-shadow:0 8px 18px -10px var(--club)}
+.sq:active{transform:scale(.95)}
+.sq:not(.hit) .meta::before{content:"+1 ";color:var(--dauber);font-weight:700}
+.sq.pop{animation:pop .5s ease-out}
+@keyframes pop{0%{transform:scale(.9)}50%{transform:scale(1.06)}100%{transform:scale(1)}}
+.sq.hint{animation:wiggle 1.2s ease-in-out 2}
+@keyframes wiggle{0%,100%{transform:rotate(0)}20%{transform:rotate(-2deg)}40%{transform:rotate(2deg)}60%{transform:rotate(-1deg)}}
+.hero{background:var(--club);color:var(--club-ink);border-radius:22px;padding:18px;display:flex;flex-direction:column;gap:12px;position:relative;overflow:hidden}
+.hero::after{content:"";position:absolute;right:-40px;top:-40px;width:150px;height:150px;border-radius:50%;background:var(--lilac);opacity:.18}
+.hero h2{font-size:1.45rem;color:var(--club-ink)}
+.hero .eyebrow{color:var(--lilac)}
+.hero .sub{opacity:.9;font-size:.9rem;margin:0}
+.meter{height:14px;border-radius:999px;background:rgb(255 255 255 / .22);position:relative;overflow:visible}
+.meter>i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--lilac),var(--dauber));transition:width .6s cubic-bezier(.2,.9,.3,1.2)}
+.meter>b{position:absolute;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:var(--club);border:2px solid rgb(255 255 255 / .5);font-size:0}
+.meter>b.got{background:var(--dauber);border-color:#fff}
+.stats{display:flex;gap:8px;flex-wrap:wrap}
+.stat{background:rgb(255 255 255 / .14);border-radius:14px;padding:8px 12px;display:flex;flex-direction:column;min-width:0;flex:1 1 90px}
+.stat b{font:700 1.35rem var(--display);font-variant-numeric:tabular-nums}
+.stat span{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;opacity:.85}
+.badges{display:flex;gap:6px;flex-wrap:wrap;list-style:none;margin:0;padding:0}
+.badges li{font:700 .75rem var(--body);border-radius:999px;padding:4px 10px;background:rgb(255 255 255 / .12);color:rgb(255 255 255 / .55);border:1px dashed rgb(255 255 255 / .35)}
+.badges li.got{background:#fff;color:var(--club);border:1px solid #fff}
+.ticker{display:flex;gap:10px;align-items:center;background:var(--card);border:2px solid var(--line);border-radius:999px;padding:8px 14px;font-size:.88rem;min-width:0}
+.ticker span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.live{flex:none;font:800 .68rem var(--body);letter-spacing:.08em;color:var(--dauber);display:flex;align-items:center;gap:5px}
+.live::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--dauber)}
+@media (prefers-reduced-motion:no-preference){.live::before{animation:blink 1.4s infinite}@keyframes blink{50%{opacity:.25}}}
+.nudge{display:flex;gap:12px;align-items:flex-start;background:var(--dauber-soft);border-radius:18px;padding:14px 16px}
+.nudge .ic{flex:none;width:36px;height:36px;border-radius:50%;background:var(--dauber);color:#fff;display:grid;place-items:center;font:700 1.1rem var(--display)}
+.nudge p{margin:0}
+.nudge b{color:var(--dauber)}
+nav button[data-count]::after{content:attr(data-count);display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:6px;border-radius:999px;background:var(--dauber);color:#fff;font:800 .68rem var(--body);vertical-align:1px}
+.podium{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:end}
+.pod{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0;text-align:center}
+.pod .av{width:52px;height:52px;border-radius:50%;background:var(--lilac);color:var(--club);display:grid;place-items:center;font:700 1.15rem var(--display);border:3px solid var(--card);box-shadow:0 0 0 2px var(--club)}
+.pod.p1 .av{width:64px;height:64px;font-size:1.35rem;background:var(--dauber);color:#fff}
+.pod .nm{font-weight:800;font-size:.85rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pod .blk{width:100%;border-radius:14px 14px 4px 4px;background:var(--club);color:var(--club-ink);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:8px;font:700 1.3rem var(--display)}
+.pod .blk small{font:600 .72rem var(--body);opacity:.8}
+.pod.p1 .blk{height:110px;background:linear-gradient(180deg,var(--dauber),var(--club))}
+.pod.p2 .blk{height:84px}.pod.p3 .blk{height:64px}
+@media (prefers-reduced-motion:no-preference){.pod .blk{animation:rise .7s cubic-bezier(.2,.9,.3,1.2) both}.pod.p1 .blk{animation-delay:.15s}@keyframes rise{from{transform:scaleY(.1);transform-origin:bottom}}}
+.mv{font:800 .7rem var(--body);margin-left:6px}
+.mv.up{color:var(--good)}.mv.down{color:var(--bad)}
+.award{display:inline-block;font:800 .66rem var(--body);letter-spacing:.04em;text-transform:uppercase;border-radius:999px;padding:2px 7px;margin-left:6px;background:var(--lilac);color:var(--club);vertical-align:2px}
+.award.said{background:var(--dauber-soft);color:var(--dauber)}
+.target{font-size:.88rem;color:var(--muted);margin:0}
+.target b{color:var(--ink)}
+.toast.big{font:700 1rem var(--display);padding:14px 22px;background:var(--club);border:2px solid var(--lilac)}
+.toast.ouch{background:var(--bad)}
+@media (prefers-reduced-motion:no-preference){.toast{animation:toastin .35s cubic-bezier(.2,.9,.3,1.3)}@keyframes toastin{from{transform:translate(-50%,30px);opacity:0}}}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--dauber);color:#fff;padding:10px 16px;border-radius:999px;font-weight:600;z-index:30;max-width:calc(100% - 32px)}
+@media (prefers-reduced-motion:no-preference){.sq.hit::after{animation:stamp .25s ease-out}@keyframes stamp{from{transform:rotate(-12deg) scale(1.6);opacity:0}}.sq.hit::before{animation:stamp .25s ease-out}}
+</style>
+
+<header>
+  <div class="wrap">
+    <div class="brand">
+      <div class="brandmark"><img src="logo.png" alt="Logo v.v. LRC"><div><div class="club">v.v. LRC · teamweekend</div><h1>Teamweekend <span>Quote Game</span></h1></div></div>
+      <div class="who" id="who"></div>
+    </div>
+    <nav role="tablist">
+      <button role="tab" id="tab-kaart" data-view="kaart" aria-selected="true">Mijn kaart</button>
+      <button role="tab" id="tab-ranking" data-view="ranking" aria-selected="false">Ranking</button>
+      <button role="tab" id="tab-log" data-view="log" aria-selected="false">Logboek</button>
+      <button role="tab" id="tab-beheer" data-view="beheer" aria-selected="false">Beheer</button>
+    </nav>
+  </div>
+</header>
+
+<main><div class="wrap" id="view"></div></main>
+<footer><div class="wrap" id="foot"></div></footer>
+<div id="sheet-root"></div>
+
+<script>
+const S={players:[],quotes:[],hits:[],me:null,view:"kaart",db:null,status:"loading",admin:false,uid:null,code:null,unsubs:[]};
+const $=s=>document.querySelector(s);
+const esc=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const initials=n=>(n||"?").trim().split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase();
+const pName=id=>S.players.find(p=>p.id===id)?.name||"Onbekend";
+const fmt=iso=>{try{const d=new Date(iso);return d.toLocaleString("nl-NL",{weekday:"short",hour:"2-digit",minute:"2-digit"})}catch{return ""}};
+const localNow=()=>{const d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,16)};
+const slug=t=>t.toLowerCase().normalize("NFD").replace(/[^\w]+/g,"-").replace(/^-|-$/g,"").slice(0,40)||"x";
+function toast(msg,kind,ms){document.querySelectorAll(".toast").forEach(x=>x.remove());const t=document.createElement("div");t.className="toast"+(kind?" "+kind:"");t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),ms||2600)}
+const RM=matchMedia("(prefers-reduced-motion: reduce)").matches;
+function celebrate(big){
+  try{navigator.vibrate&&navigator.vibrate(big?[60,40,120]:50)}catch{}
+  if(RM)return;
+  let c=document.getElementById("confetti");if(!c){c=document.createElement("canvas");c.id="confetti";document.body.appendChild(c)}
+  const dpr=devicePixelRatio||1,W=innerWidth,H=innerHeight;c.width=W*dpr;c.height=H*dpr;const x=c.getContext("2d");x.scale(dpr,dpr);
+  const cols=["#6a0091","#d04a9f","#e3c8f7","#ffffff","#ff8fc8","#f5c933"];
+  const P=Array.from({length:big?160:70},()=>({x:W/2+(Math.random()-.5)*W*.3,y:H*.55,vx:(Math.random()-.5)*14,vy:-Math.random()*16-6,r:Math.random()*6+4,c:cols[Math.random()*cols.length|0],a:Math.random()*6,s:Math.random()<.35}));
+  let f=0;(function tick(){x.clearRect(0,0,W,H);P.forEach(p=>{p.vy+=.45;p.vx*=.985;p.x+=p.vx;p.y+=p.vy;p.a+=.2;x.save();x.translate(p.x,p.y);x.rotate(p.a);x.fillStyle=p.c;
+    if(p.s){x.beginPath();x.moveTo(0,p.r*.3);x.bezierCurveTo(-p.r,-p.r*.4,-p.r*.4,-p.r,0,-p.r*.35);x.bezierCurveTo(p.r*.4,-p.r,p.r,-p.r*.4,0,p.r*.3);x.fill()}else x.fillRect(-p.r/2,-p.r/4,p.r,p.r/2);x.restore()});
+    if(++f<110)requestAnimationFrame(tick);else x.clearRect(0,0,W,H)})();
+}
+const BADGES=[[1,"Eerste vangst"],[3,"Oren gespitst"],[5,"Scherp oor"],[10,"Quote-jager"]];
+function badgeList(total){const b=BADGES.filter(([n])=>n<total);b.push([total,"Volle kaart"]);return b}
+const rel=iso=>{const m=Math.round((Date.now()-new Date(iso))/60000);if(!(m>=0))return"";if(m<1)return"zojuist";if(m<60)return m+" min geleden";const h=Math.round(m/60);return h<24?h+" uur geleden":fmt(iso)};
+const hitTime=h=>h.createdAt||h.at;
+let prevRanks={};try{prevRanks=JSON.parse(localStorage.getItem("qb-ranks")||"{}")}catch{}
+let logSeen="";try{logSeen=localStorage.getItem("qb-logseen")||""}catch{}
+function detectNew(){
+  if(!S.known){S.known=new Set(S.hits.map(h=>h.id));return}
+  for(const h of S.hits){if(S.known.has(h.id))continue;S.known.add(h.id);
+    if(h.id===S.justHit)continue;
+    const q=S.quotes.find(x=>x.id===h.quoteId);
+    if(h.sayerId===S.me&&S.me){toast(`Betrapt! ${pName(h.hearerId)} hoorde jou “${q?q.text:"…"}” zeggen. −1`,"ouch",4200);try{navigator.vibrate&&navigator.vibrate([30,60,30])}catch{}}
+    else if(h.hearerId!==S.me)toast(`${pName(h.hearerId)} betrapte ${pName(h.sayerId)}!`,"",2600);
+  }
+}
+try{S.me=localStorage.getItem("qb-me")}catch{}
+try{const v=location.hash.slice(1);if(["kaart","ranking","log","beheer"].includes(v))S.view=v}catch{}
+
+/* ---------- scoring ---------- */
+function scores(){
+  const m={};S.players.forEach(p=>m[p.id]={id:p.id,name:p.name,heard:0,said:0});
+  S.hits.forEach(h=>{if(m[h.hearerId])m[h.hearerId].heard++;if(m[h.sayerId])m[h.sayerId].said++});
+  return Object.values(m).map(r=>({...r,total:r.heard-r.said}))
+    .sort((a,b)=>b.total-a.total||b.heard-a.heard||a.name.localeCompare(b.name));
+}
+
+/* ---------- render ---------- */
+function render(){
+  if(S.status==="ready"||S.hits.length)detectNew();
+  const unread=S.hits.filter(h=>String(hitTime(h))>logSeen&&h.hearerId!==S.me).length;
+  const lb=document.querySelector('nav button[data-view="log"]');if(lb){if(unread&&S.view!=="log")lb.dataset.count=unread>9?"9+":unread;else delete lb.dataset.count}
+  if(S.view==="beheer"&&!S.admin)S.view="kaart";
+  document.querySelectorAll("nav button").forEach(b=>{b.setAttribute("aria-selected",b.dataset.view===S.view);if(b.dataset.view==="beheer")b.hidden=!S.admin});
+  $("#foot").innerHTML=S.status==="adminlogin"?"":S.admin?`<button class="linkbtn" id="admin-out">Uitloggen als beheerder</button>`:`<button class="linkbtn" id="admin-in">Inloggen als beheerder</button>`;
+  const me=S.players.find(p=>p.id===S.me);
+  $("#who").innerHTML=(me?`Je speelt als <b>${esc(me.name)}</b> · <button id="switch">wissel</button>`:"")+(S.admin?`<span class="badge">Beheerder</span>`:"");
+  const v=$("#view");
+  if(S.status==="loading"){v.innerHTML=`<p class="lede">Spelgegevens laden…</p>`;return}
+  if(S.status==="offline"){v.innerHTML=`<div class="notice">De spelstand is niet bereikbaar. Controleer je internetverbinding en of de teamcode klopt.</div><div><button class="btn ghost" id="logout">Andere teamcode invoeren</button></div>`;return}
+  if(S.status==="adminlogin"){v.innerHTML=`<form class="panel" id="f-admin"><span class="eyebrow">Beheerder</span><h2>Inloggen als beheerder</h2>
+    <p class="small">Alleen de organisator heeft een beheerdersaccount. Spelers hoeven hier niets te doen.</p>
+    <label for="in-email">E-mailadres<input id="in-email" type="email" autocomplete="username" required></label>
+    <label for="in-pass">Wachtwoord<input id="in-pass" type="password" autocomplete="current-password" required></label>
+    <p class="err" id="admin-err" hidden></p>
+    <div class="inline"><button class="btn primary">Inloggen</button><button type="button" class="btn ghost" id="admin-cancel">Annuleren</button></div></form>`;return}
+  if(S.status==="needcode"){v.innerHTML=`<form class="panel" id="f-code"><span class="eyebrow">Inloggen</span><h2>Vul de teamcode in</h2>
+    <p class="small">Deze code krijg je van de organisator. Iedereen met dezelfde code speelt in hetzelfde spel.</p>
+    <label for="in-code">Teamcode<input id="in-code" autocomplete="off" autocapitalize="characters" placeholder="bijv. LRC-WEEKEND-7Q4K" required></label>
+    <div><button class="btn primary">Inloggen</button></div></form>`;return}
+  ({kaart:viewKaart,ranking:viewRanking,log:viewLog,beheer:viewBeheer})[S.view](v);
+}
+
+function pickMe(v){
+  if(!S.players.length){
+    v.innerHTML=S.admin?`<div class="empty"><h2>Nog geen spelers</h2><p>Voeg eerst het team toe onder Beheer. Daarna kiest iedereen hier zijn eigen naam.</p><button class="btn primary" data-go="beheer">Naar Beheer</button></div>`:`<div class="empty"><h2>Nog even geduld</h2><p>De organisator zet de spelers en quotes klaar. Zodra dat gebeurd is, verschijnt hier je naam.</p></div>`;return;
+  }
+  v.innerHTML=`<div><h2>Wie ben jij?</h2><p class="lede">Kies je naam. Je telefoon onthoudt dit, zodat jouw vinkjes op jouw kaart komen.</p><p class="small" style="margin:0"><button class="btn ghost" id="logout" style="padding:4px 12px">Uitloggen</button></p></div>
+  <ul class="chips">${S.players.map(p=>`<li style="padding:0"><button class="btn ghost" style="border:0" data-me="${p.id}">${esc(p.name)}</button></li>`).join("")}</ul>`;
+}
+
+function viewKaart(v){
+  const me=S.players.find(p=>p.id===S.me);
+  if(!me)return pickMe(v);
+  if(!S.quotes.length){
+    v.innerHTML=S.admin?`<div class="empty"><h2>De kaart is nog leeg</h2><p>Voeg onder Beheer de uitspraken toe die jullie gaan verzamelen, zoals "Even sparren" of "Dat pakken we offline op".</p><button class="btn primary" data-go="beheer">Quotes toevoegen</button></div>`:`<div class="empty"><h2>De kaart is nog leeg</h2><p>De organisator zet de quotes klaar. Kom zo nog even terug.</p></div>`;return;
+  }
+  const mine=Object.fromEntries(S.hits.filter(h=>h.hearerId===me.id).map(h=>[h.quoteId,h]));
+  const n=Object.keys(mine).length;
+  const all=scores();const rank=all.findIndex(r=>r.id===me.id);const sc=all[rank]||{total:0,said:0,heard:0};
+  const total=S.quotes.length;const pct=Math.round(n/total*100);
+  const bl=badgeList(total);
+  const ahead=rank>0?all[rank-1]:null;
+  const target=rank===0&&sc.total>0?`Jij staat <b>bovenaan</b>. Blijf luisteren om je plek te houden.`
+    :ahead?`Nog <b>${ahead.total-sc.total+1} punt${ahead.total-sc.total+1===1?"":"en"}</b> om ${esc(ahead.name)} in te halen voor plek ${rank}.`:"";
+  const latest=[...S.hits].sort((x,y)=>String(hitTime(y)).localeCompare(String(hitTime(x))))[0];
+  const lq=latest&&S.quotes.find(x=>x.id===latest.quoteId);
+  const myLast=S.hits.filter(h=>h.hearerId===me.id).map(hitTime).sort().pop();
+  const idle=!myLast||(Date.now()-new Date(myLast))>60*60000;
+  const open=S.quotes.filter(q=>!mine[q.id]);
+  const pick=open.length?open[Math.floor(Date.now()/600000)%open.length]:null;
+  let nudge="";
+  if(n===total)nudge=`<div class="nudge"><div class="ic">♥</div><p><b>Volle kaart!</b> Je hebt alles gehoord. Pas nu vooral op je eigen woorden, want elke quote die jij zegt kost een punt.</p></div>`;
+  else if(n===0)nudge=`<div class="nudge"><div class="ic">!</div><p><b>Spits je oren.</b> Tik op een quote zodra je hem hoort en pak je eerste punt. Wie zegt als eerste “${esc(pick.text)}”?</p></div>`;
+  else if(idle)nudge=`<div class="nudge"><div class="ic">!</div><p><b>Al even stil op jouw kaart.</b> Nog ${open.length} quotes te vangen. Probeer een gesprek richting “${esc(pick.text)}” te sturen…</p></div>`;
+  else if(sc.said>0)nudge=`<div class="nudge"><div class="ic">−</div><p>Je bent al <b>${sc.said}× betrapt</b>. Let op je woorden!</p></div>`;
+  v.innerHTML=`<section class="hero"><div><span class="eyebrow">Jouw kaart</span><h2>${n===total?"Volle kaart!":`${n} van ${total} gehoord`}</h2></div>
+    <div class="meter" role="progressbar" aria-valuenow="${n}" aria-valuemin="0" aria-valuemax="${total}" aria-label="Voortgang"><i style="width:${pct}%"></i>${bl.map(([k])=>`<b class="${n>=k?"got":""}" style="left:${Math.min(100,k/total*100)}%"></b>`).join("")}</div>
+    <div class="stats"><div class="stat"><b>${sc.total>0?"+":""}${sc.total}</b><span>Score</span></div><div class="stat"><b>${rank+1}<small style="font-size:.8rem;opacity:.7">/${all.length}</small></b><span>Plek</span></div><div class="stat"><b>${sc.said}</b><span>Betrapt</span></div></div>
+    <ul class="badges" aria-label="Badges">${bl.map(([k,l])=>`<li class="${n>=k?"got":""}">${n>=k?"♥ ":""}${esc(l)}</li>`).join("")}</ul></section>
+    ${target?`<p class="target">${target}</p>`:""}
+    ${latest?`<div class="ticker"><span class="live">LIVE</span><span><b>${esc(pName(latest.hearerId))}</b> betrapte <b>${esc(pName(latest.sayerId))}</b> op “${esc(lq?.text||"…")}” · ${esc(rel(hitTime(latest)))}</span></div>`:""}
+    ${nudge}
+    <div class="grid">${S.quotes.map(q=>{const h=mine[q.id];
+      return `<button class="sq${h?" hit":""}${S.justHit===`${me.id}__${q.id}`?" pop":""}${!h&&pick&&q.id===pick.id&&n<total?" hint":""}" data-q="${q.id}" ${h?`data-initials="${esc(initials(pName(h.sayerId)))}"`:""}>
+        <q>${esc(q.text)}</q><span class="meta">${h?`${esc(pName(h.sayerId))} · ${esc(fmt(h.at))}`:"Tik als je het hoort"}</span></button>`}).join("")}</div>`;
+  S.justHit=S.justHit&&S.justHit.startsWith("~")?S.justHit:S.justHit?"~"+S.justHit:null;
+}
+
+function viewRanking(v){
+  if(!S.players.length){v.innerHTML=`<div class="empty"><h2>Nog geen ranking</h2><p>Zodra er spelers zijn toegevoegd en de eerste quotes zijn gehoord, verschijnt hier de stand.</p></div>`;return}
+  const r=scores();
+  const topHeard=Math.max(0,...r.map(x=>x.heard)),topSaid=Math.max(0,...r.map(x=>x.said));
+  const uniq=(k,v)=>r.filter(y=>y[k]===v).length===1;
+  const aw=x=>(topHeard>0&&x.heard===topHeard&&uniq("heard",topHeard)?`<span class="award">Scherpste oor</span>`:"")+(topSaid>0&&x.said===topSaid&&uniq("said",topSaid)?`<span class="award said">Cliché-kampioen</span>`:"");
+  const mv=(x,i)=>{const p=prevRanks[x.id];if(p==null||p===i)return"";return p>i?`<span class="mv up" title="Gestegen">▲${p-i}</span>`:`<span class="mv down" title="Gedaald">▼${i-p}</span>`};
+  const pod=S.hits.length&&r.length>=3?`<div class="podium">${[1,0,2].map(i=>{const x=r[i];return `<div class="pod p${i+1}"><div class="av">${esc(initials(x.name))}</div><div class="nm">${esc(x.name)}</div><div class="blk">${x.total>0?"+":""}${x.total}<small>${i+1}e plek</small></div></div>`}).join("")}</div>`:"";
+  v.innerHTML=`<div><span class="eyebrow">Tussenstand · live</span><h2>Wie luistert het best, wie praat het meest in clichés?</h2>
+  <p class="lede">Gehoord geeft +1 per quote, zelf gezegd −1 per keer dat iemand jou betrapt. Pijltjes tonen wat er veranderd is sinds je vorige bezoek.</p></div>
+  ${pod}
+  <div class="board" role="table">
+    <div class="row head" role="row"><span>#</span><span>Speler</span><span class="num">Gehoord</span><span class="num">Gezegd</span><span class="total" style="font:inherit">Totaal</span></div>
+    ${r.map((x,i)=>`<div class="row${i===0&&x.total>0?" top1":""}${x.id===S.me?" me-row":""}" role="row">
+      <span class="pos">${i===0&&x.total>0?"♥":i+1}</span><span class="name">${esc(x.name)}${mv(x,i)}${aw(x)}</span>
+      <span class="num plus">+${x.heard}</span><span class="num min">−${x.said}</span>
+      <span class="total">${x.total>0?"+":x.total<0?"−":""}${Math.abs(x.total)}</span></div>`).join("")}
+  </div>`;
+  clearTimeout(S.rankSave);S.rankSave=setTimeout(()=>{try{localStorage.setItem("qb-ranks",JSON.stringify(Object.fromEntries(r.map((x,i)=>[x.id,i]))))}catch{}},4000);
+}
+
+function viewLog(v){
+  const newest=S.hits.map(hitTime).sort().pop();if(newest&&newest>logSeen){logSeen=newest;try{localStorage.setItem("qb-logseen",logSeen)}catch{};const lb=document.querySelector('nav button[data-view="log"]');if(lb)delete lb.dataset.count}
+  if(!S.hits.length){v.innerHTML=`<div class="empty"><h2>Nog niets betrapt</h2><p>Elke aangevinkte quote verschijnt hier, met wie hem zei, wie hem hoorde en wanneer.</p></div>`;return}
+  const list=[...S.hits].sort((a,b)=>String(b.at).localeCompare(String(a.at)));
+  v.innerHTML=`<div><span class="eyebrow">Logboek</span><h2>${list.length} keer betrapt</h2></div>
+  <ul class="log">${list.map(h=>{const q=S.quotes.find(x=>x.id===h.quoteId);
+    return `<li><time>${esc(fmt(h.at))}</time><span class="q">“${esc(q?.text||"Verwijderde quote")}”</span>
+    <span class="s">${esc(pName(h.sayerId))} zei het, ${esc(pName(h.hearerId))} hoorde het · ${esc(rel(hitTime(h)))}</span></li>`}).join("")}</ul>`;
+}
+
+function inviteLink(){return location.origin+location.pathname+"?code="+encodeURIComponent(S.code||"")}
+function qrSvg(t){try{const q=qrcode(0,"M");q.addData(t);q.make();return q.createSvgTag({cellSize:6,margin:0,scalable:false})}catch{return `<p class="small" style="line-height:1.4">QR-code kon niet worden gemaakt. Deel de link hierboven.</p>`}}
+function viewBeheer(v){
+  v.innerHTML=`<div><span class="eyebrow">Voorbereiding</span><h2>Team en quotes</h2>
+  <p class="lede">Alleen jij als beheerder ziet dit tabblad. Spelers kunnen alleen quotes afvinken.</p></div>
+  <section class="panel"><h2>Spelers uitnodigen</h2>
+    <p class="small">Deel deze link in de groepsapp, of laat de QR-code scannen. De teamcode zit er al in, dus spelers kiezen alleen nog hun naam.</p>
+    <div class="inline"><input id="in-invite" readonly value="${esc(inviteLink())}"><button class="btn" id="copy-invite" type="button">Kopieer link</button></div>
+    <div id="qr" style="align-self:center;background:#fff;padding:12px;border-radius:14px;line-height:0">${qrSvg(inviteLink())}</div>
+  </section>
+  <section class="panel"><h2>Spelers <span class="small">(${S.players.length})</span></h2>
+    <form class="inline" id="f-player"><input id="in-player" placeholder="Naam, bijv. Sanne" maxlength="40" autocomplete="off"><button class="btn">Toevoegen</button></form>
+    ${S.players.length?`<ul class="chips">${S.players.map(p=>`<li><span>${esc(p.name)}</span><button aria-label="Verwijder ${esc(p.name)}" data-delp="${p.id}">×</button></li>`).join("")}</ul>`:`<p class="small">Nog geen spelers. Voeg iedereen toe die meedoet.</p>`}
+  </section>
+  <section class="panel"><h2>Quotes op de kaart <span class="small">(${S.quotes.length})</span></h2>
+    <form class="inline" id="f-quote"><input id="in-quote" placeholder="Bijv. Kunnen we dit even parkeren?" maxlength="90" autocomplete="off"><button class="btn">Toevoegen</button></form>
+    ${S.quotes.length?`<ul class="qlist">${S.quotes.map(q=>`<li><span>“${esc(q.text)}”</span><button class="btn ghost" style="padding:4px 10px" data-delq="${q.id}">Verwijder</button></li>`).join("")}</ul>`
+    :`<p class="small">Nog geen quotes. Typ ze zelf, of begin met een setje kantoorclichés:</p><div><button class="btn ghost" id="seed">12 voorbeeldquotes toevoegen</button></div>`}
+  </section>
+  ${S.hits.length?`<section class="panel"><h2>Opnieuw beginnen</h2><p class="small">Wist alle ${S.hits.length} vinkjes. Spelers en quotes blijven staan.</p><div id="reset-zone"><button class="btn danger" id="reset">Alle vinkjes wissen</button></div></section>`:""}`;
+}
+
+/* ---------- tick sheet ---------- */
+function openSheet(qid){
+  const q=S.quotes.find(x=>x.id===qid);const me=S.me;
+  const hid=`${me}__${qid}`;const h=S.hits.find(x=>x.id===hid);const mineHit=!h||h.uid===S.uid||S.admin;
+  const others=S.players.filter(p=>p.id!==me);
+  const root=$("#sheet-root");
+  root.innerHTML=`<div class="sheet" id="sheet"><form class="box" id="f-hit">
+    <span class="eyebrow">${h?"Al afgevinkt":"Gehoord!"}</span>
+    <blockquote>“${esc(q.text)}”</blockquote>
+    ${others.length?`<div class="row2">
+      <label for="in-sayer">Wie zei het?<select id="in-sayer" required><option value="">Kies…</option>${others.map(p=>`<option value="${p.id}" ${h?.sayerId===p.id?"selected":""}>${esc(p.name)}</option>`).join("")}</select></label>
+      <label for="in-at">Wanneer?<input type="datetime-local" id="in-at" required value="${h?esc(h.at):localNow()}"></label>
+    </div>`:`<p class="err">Er staat nog niemand anders in het team. Vraag de organisator om spelers toe te voegen.</p>`}
+    <p class="err" id="hit-err" hidden></p>
+    <div class="actions">
+      ${!mineHit?`<p class="small" style="margin:0;flex-basis:100%">Deze quote is op een andere telefoon afgevinkt. Alleen die telefoon of de beheerder kan dit aanpassen.</p>`:""}${h&&mineHit?`<button type="button" class="btn danger" id="untick">Vinkje weghalen</button>`:""}
+      <button type="button" class="btn ghost" id="close">Annuleren</button>
+      <button class="btn primary" ${others.length&&mineHit?"":"disabled"}>${h?"Bijwerken":"Afvinken"}</button>
+    </div></form></div>`;
+  $("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet"||e.target.id==="close")root.innerHTML=""});
+  $("#f-hit").addEventListener("submit",async e=>{e.preventDefault();
+    const sayerId=$("#in-sayer").value,at=$("#in-at").value;
+    if(!sayerId||!at)return;
+    try{await S.db.collection("hits").doc(hid).set({quoteId:qid,hearerId:me,sayerId,at,uid:(h&&S.admin)?h.uid:S.uid,createdAt:new Date().toISOString()});
+      root.innerHTML="";
+      if(!h){const n=S.hits.filter(x=>x.hearerId===me&&x.id!==hid).length+1;const bl=badgeList(S.quotes.length);const got=bl.find(([k])=>k===n);
+        S.justHit=hid;S.known&&S.known.add(hid);
+        if(got){celebrate(true);toast(`Badge verdiend: ${got[1]}!`,"big",3600)}else{celebrate(false);toast(`+1 voor jou, −1 voor ${pName(sayerId)}`)}
+        render()}
+      else toast("Bijgewerkt")}
+    catch(err){const el=$("#hit-err");el.hidden=false;el.textContent=writeErr(err)}
+  });
+  const u=$("#untick");if(u)u.addEventListener("click",async()=>{try{await S.db.collection("hits").doc(hid).delete();root.innerHTML="";toast("Vinkje weggehaald")}catch(err){const el=$("#hit-err");el.hidden=false;el.textContent=writeErr(err)}});
+}
+function writeErr(err){return /not_granted|permission|denied|forbidden/i.test(String(err?.code||err?.message))?"Dit mag alleen de beheerder of de telefoon waarop het is afgevinkt.":"Opslaan lukte niet. Controleer je verbinding en probeer het opnieuw."}
+
+/* ---------- events ---------- */
+const SEED=["Even sparren","Dat pakken we offline op","Kunnen we dit even parkeren?","Laten we het niet groter maken dan het is","Ik zit er even in te duiken","Even voor de duidelijkheid","Zullen we er een overleg voor inschieten?","Dat is een goed punt","Laten we even een stap terug doen","Ik heb er een hard stop om","Kun je me even meenemen?","Dat is quick win"];
+document.addEventListener("click",async e=>{
+  const t=e.target.closest("button");if(!t)return;
+  if(t.dataset.view){S.view=t.dataset.view;try{history.replaceState(null,"","#"+S.view)}catch{}render();return}
+  if(t.dataset.go){S.view=t.dataset.go;render();return}
+  if(t.id==="copy-invite"){const inp=$("#in-invite");try{await navigator.clipboard.writeText(inp.value);toast("Link gekopieerd")}catch{inp.select();toast("Selecteer en kopieer de link")}return}
+  if(t.id==="admin-in"){S.prev=S.status;S.status="adminlogin";render();return}
+  if(t.id==="admin-cancel"){S.status=S.prev||"ready";render();return}
+  if(t.id==="admin-out"){await firebase.auth().signOut();await firebase.auth().signInAnonymously();toast("Uitgelogd als beheerder");if(S.code)connect(S.code);return}
+  if(t.id==="logout"){try{localStorage.removeItem("qb-code");localStorage.removeItem("qb-me")}catch{};location.reload();return}
+  if(t.id==="switch"){S.me=null;try{localStorage.removeItem("qb-me")}catch{};S.view="kaart";render();return}
+  if(t.dataset.me){S.me=t.dataset.me;try{localStorage.setItem("qb-me",S.me)}catch{};render();return}
+  if(t.dataset.q){openSheet(t.dataset.q);return}
+  try{
+    if(t.dataset.delp){await S.db.collection("players").doc(t.dataset.delp).delete();return}
+    if(t.dataset.delq){await S.db.collection("quotes").doc(t.dataset.delq).delete();return}
+    if(t.id==="seed"){t.disabled=true;for(const [i,text] of SEED.entries())await S.db.collection("quotes").doc(slug(text)).set({text,order:i,addedAt:new Date().toISOString()});return}
+    if(t.id==="reset"){$("#reset-zone").innerHTML=`<p class="small">Zeker weten? Dit kan niet ongedaan worden.</p><div class="inline"><button class="btn danger" id="reset-yes">Ja, wis alles</button><button class="btn ghost" id="reset-no">Nee</button></div>`;return}
+    if(t.id==="reset-no"){render();return}
+    if(t.id==="reset-yes"){for(const h of S.hits)await S.db.collection("hits").doc(h.id).delete();toast("Alle vinkjes gewist");return}
+  }catch(err){toast(writeErr(err))}
+});
+document.addEventListener("submit",async e=>{
+  const f=e.target;
+  if(f.id==="f-admin"){e.preventDefault();const el=$("#admin-err");el.hidden=true;
+    try{await firebase.auth().signInWithEmailAndPassword($("#in-email").value.trim(),$("#in-pass").value);toast("Ingelogd als beheerder");
+      if(S.code)connect(S.code);else{S.status="needcode";render()}}
+    catch(err){el.hidden=false;el.textContent="Inloggen lukte niet. Controleer je e-mailadres en wachtwoord."}return}
+  if(f.id==="f-code"){e.preventDefault();const c=$("#in-code").value.trim().toUpperCase().replace(/[^A-Z0-9-]/g,"");if(c.length<6){toast("Gebruik minstens 6 tekens");return}
+    try{localStorage.setItem("qb-code",c)}catch{};connect(c);return}
+  if(f.id==="f-player"){e.preventDefault();const n=$("#in-player").value.trim();if(!n)return;
+    if(S.players.some(p=>p.name.toLowerCase()===n.toLowerCase())){toast(`${n} staat er al in`);return}
+    try{await S.db.collection("players").doc(slug(n)+"-"+Date.now().toString(36)).set({name:n,addedAt:new Date().toISOString()});setTimeout(()=>$("#in-player")?.focus(),50)}catch(err){toast(writeErr(err))}}
+  if(f.id==="f-quote"){e.preventDefault();const n=$("#in-quote").value.trim();if(!n)return;
+    try{await S.db.collection("quotes").doc(slug(n)+"-"+Date.now().toString(36)).set({text:n,order:Date.now(),addedAt:new Date().toISOString()});setTimeout(()=>$("#in-quote")?.focus(),50)}catch(err){toast(writeErr(err))}}
+});
+window.addEventListener("hashchange",()=>{const v=location.hash.slice(1);if(["kaart","ranking","log","beheer"].includes(v)){S.view=v;render()}});
+
+setInterval(()=>{if(S.status==="ready"&&S.view!=="beheer"&&!document.querySelector("#sheet"))render()},60000);
+/* ---------- data (Firebase) ---------- */
+async function connect(code){
+  S.code=code;S.status="loading";S.unsubs.forEach(u=>u());S.unsubs=[];render();
+  try{if(!firebase.auth().currentUser)await firebase.auth().signInAnonymously()}catch{S.status="offline";render();return}
+  const db=firebase.firestore().collection("games").doc(code);
+  S.db=db;let loaded=0;
+  const sub=(name,key,sort)=>S.unsubs.push(db.collection(name).onSnapshot(snap=>{
+    S[key]=snap.docs.map(d=>({id:d.id,...d.data()})).sort(sort);
+    if(key==="players"&&S.me&&!S.players.some(p=>p.id===S.me)&&!snap.metadata.fromCache)S.me=null;
+    if(++loaded>=3&&S.status==="loading")S.status="ready";
+    if(S.status!=="adminlogin")render();
+  },()=>{S.status="offline";render()}));
+  sub("players","players",(a,b)=>a.name.localeCompare(b.name));
+  sub("quotes","quotes",(a,b)=>(a.order??0)-(b.order??0));
+  sub("hits","hits",(a,b)=>String(a.at).localeCompare(String(b.at)));
+}
+if(!window.FIREBASE_CONFIG||!FIREBASE_CONFIG.apiKey||FIREBASE_CONFIG.apiKey.startsWith("VUL")){
+  $("#view").innerHTML=`<div class="notice">Firebase is nog niet ingesteld. Vul je gegevens in <b>firebase-config.js</b> in (zie README).</div>`;
+}else{
+  firebase.initializeApp(FIREBASE_CONFIG);
+  try{firebase.firestore().enablePersistence({synchronizeTabs:true}).catch(()=>{})}catch{}
+  let started=false;
+  firebase.auth().onAuthStateChanged(u=>{
+    S.admin=!!u&&!u.isAnonymous;S.uid=u?u.uid:null;
+    if(!started){started=true;let code=null;try{code=localStorage.getItem("qb-code")}catch{}
+      try{const lc=new URLSearchParams(location.search).get("code");if(lc){code=lc.trim().toUpperCase().replace(/[^A-Z0-9-]/g,"");localStorage.setItem("qb-code",code);history.replaceState(null,"",location.pathname+location.hash)}}catch{}
+      if(code)connect(code);else{S.status="needcode";render()}}
+    else if(S.status!=="adminlogin")render();
+  });
+}
+</script>
+</body>
+</html>
