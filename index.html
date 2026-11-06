@@ -138,7 +138,7 @@ footer .wrap{padding-block:0 32px;display:flex;justify-content:center}
 .sq{transition:transform .15s ease,box-shadow .15s ease,border-color .15s}
 .sq:not(.hit):hover{transform:translateY(-3px);box-shadow:0 8px 18px -10px var(--club)}
 .sq:active{transform:scale(.95)}
-.sq:not(.hit) .meta::before{content:"+1 ";color:var(--dauber);font-weight:700}
+.sq:not([disabled]) .meta::before{content:"+1 ";color:var(--dauber);font-weight:700}
 .sq.pop{animation:pop .5s ease-out}
 @keyframes pop{0%{transform:scale(.9)}50%{transform:scale(1.06)}100%{transform:scale(1)}}
 .sq.hint{animation:wiggle 1.2s ease-in-out 2}
@@ -188,6 +188,19 @@ nav button[data-count]::after{content:attr(data-count);display:inline-grid;place
 .toast.big{font:700 1rem var(--display);padding:14px 22px;background:var(--club);border:2px solid var(--lilac)}
 .toast.ouch{background:var(--bad)}
 @media (prefers-reduced-motion:no-preference){.toast{animation:toastin .35s cubic-bezier(.2,.9,.3,1.3)}@keyframes toastin{from{transform:translate(-50%,30px);opacity:0}}}
+.cm{display:block;background:var(--dauber-soft);border-radius:4px 14px 14px 14px;padding:6px 10px;font-size:.88rem;font-style:italic;margin-top:4px;overflow-wrap:anywhere}
+.log li>*:not(time){grid-column:2}
+.log .linkbtn{justify-self:start;font-size:.78rem}
+.ticker.tw{border-radius:18px;align-items:flex-start}
+.ticker.tw>div{min-width:0;display:flex;flex-direction:column;gap:2px}
+.ticker.tw .one{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+textarea{font:500 1rem var(--body);color:var(--ink);background:var(--paper);border:1.5px solid var(--line);border-radius:8px;padding:10px 12px;width:100%;resize:vertical}
+textarea:focus-visible{outline:2px solid var(--dauber);outline-offset:2px}
+.sq[disabled]{cursor:default;opacity:.75}
+.sq[disabled]:hover{transform:none;box-shadow:none}
+.hero.win{background:linear-gradient(135deg,var(--dauber),var(--club));text-align:center;align-items:center}
+.hero.win h2{font-size:1.7rem}
+.hero.win .crown{font:700 2.4rem var(--display);line-height:1}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--dauber);color:#fff;padding:10px 16px;border-radius:999px;font-weight:600;z-index:30;max-width:calc(100% - 32px)}
 @media (prefers-reduced-motion:no-preference){.sq.hit::after{animation:stamp .25s ease-out}@keyframes stamp{from{transform:rotate(-12deg) scale(1.6);opacity:0}}.sq.hit::before{animation:stamp .25s ease-out}}
 </style>
@@ -212,7 +225,7 @@ nav button[data-count]::after{content:attr(data-count);display:inline-grid;place
 <div id="sheet-root"></div>
 
 <script>
-const S={players:[],quotes:[],hits:[],me:null,view:"kaart",db:null,status:"loading",admin:false,uid:null,code:null,unsubs:[]};
+const S={meta:{},players:[],quotes:[],hits:[],me:null,view:"kaart",db:null,status:"loading",admin:false,uid:null,code:null,unsubs:[]};
 const $=s=>document.querySelector(s);
 const esc=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const initials=n=>(n||"?").trim().split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase();
@@ -233,7 +246,8 @@ function celebrate(big){
     if(p.s){x.beginPath();x.moveTo(0,p.r*.3);x.bezierCurveTo(-p.r,-p.r*.4,-p.r*.4,-p.r,0,-p.r*.35);x.bezierCurveTo(p.r*.4,-p.r,p.r,-p.r*.4,0,p.r*.3);x.fill()}else x.fillRect(-p.r/2,-p.r/4,p.r,p.r/2);x.restore()});
     if(++f<110)requestAnimationFrame(tick);else x.clearRect(0,0,W,H)})();
 }
-const BADGES=[[1,"Eerste vangst"],[3,"Oren gespitst"],[5,"Scherp oor"],[10,"Quote-jager"]];
+const BADGES=[[1,"Eerste vangst"],[5,"Scherp oor"],[10,"Quote-jager"],[20,"Oren van goud"]];
+const sgn=n=>(n>0?"+":n<0?"−":"")+Math.abs(n);
 function badgeList(total){const b=BADGES.filter(([n])=>n<total);b.push([total,"Volle kaart"]);return b}
 const rel=iso=>{const m=Math.round((Date.now()-new Date(iso))/60000);if(!(m>=0))return"";if(m<1)return"zojuist";if(m<60)return m+" min geleden";const h=Math.round(m/60);return h<24?h+" uur geleden":fmt(iso)};
 const hitTime=h=>h.createdAt||h.at;
@@ -245,7 +259,7 @@ function detectNew(){
     if(h.id===S.justHit)continue;
     const q=S.quotes.find(x=>x.id===h.quoteId);
     if(h.sayerId===S.me&&S.me){toast(`Betrapt! ${pName(h.hearerId)} hoorde jou “${q?q.text:"…"}” zeggen. −1`,"ouch",4200);try{navigator.vibrate&&navigator.vibrate([30,60,30])}catch{}}
-    else if(h.hearerId!==S.me)toast(`${pName(h.hearerId)} betrapte ${pName(h.sayerId)}!`,"",2600);
+    else if(h.hearerId!==S.me)toast(`${pName(h.hearerId)} betrapte ${pName(h.sayerId)}!${h.comment?` “${h.comment}”`:""}`,"",h.comment?4000:2600);
   }
 }
 try{S.me=localStorage.getItem("qb-me")}catch{}
@@ -299,36 +313,46 @@ function viewKaart(v){
   if(!S.quotes.length){
     v.innerHTML=S.admin?`<div class="empty"><h2>De kaart is nog leeg</h2><p>Voeg onder Beheer de uitspraken toe die jullie gaan verzamelen, zoals "Even sparren" of "Dat pakken we offline op".</p><button class="btn primary" data-go="beheer">Quotes toevoegen</button></div>`:`<div class="empty"><h2>De kaart is nog leeg</h2><p>De organisator zet de quotes klaar. Kom zo nog even terug.</p></div>`;return;
   }
-  const mine=Object.fromEntries(S.hits.filter(h=>h.hearerId===me.id).map(h=>[h.quoteId,h]));
-  const n=Object.keys(mine).length;
+  const closed=!!(S.meta&&S.meta.closed);
   const all=scores();const rank=all.findIndex(r=>r.id===me.id);const sc=all[rank]||{total:0,said:0,heard:0};
-  const total=S.quotes.length;const pct=Math.round(n/total*100);
-  const bl=badgeList(total);
-  const ahead=rank>0?all[rank-1]:null;
-  const target=rank===0&&sc.total>0?`Jij staat <b>bovenaan</b>. Blijf luisteren om je plek te houden.`
-    :ahead?`Nog <b>${ahead.total-sc.total+1} punt${ahead.total-sc.total+1===1?"":"en"}</b> om ${esc(ahead.name)} in te halen voor plek ${rank}.`:"";
+  const myHits=S.hits.filter(h=>h.hearerId===me.id);
+  const byQ={};myHits.forEach(h=>{(byQ[h.quoteId]=byQ[h.quoteId]||[]).push(h)});
+  Object.values(byQ).forEach(a=>a.sort((x,y)=>String(hitTime(y)).localeCompare(String(hitTime(x)))));
+  const total=S.quotes.length;const caught=myHits.length;const distinct=S.quotes.filter(q=>byQ[q.id]).length;
+  const badges=BADGES.map(([k,l])=>({l,got:caught>=k})).concat([{l:"Volle kaart",got:distinct===total}]);
   const latest=[...S.hits].sort((x,y)=>String(hitTime(y)).localeCompare(String(hitTime(x))))[0];
   const lq=latest&&S.quotes.find(x=>x.id===latest.quoteId);
-  const myLast=S.hits.filter(h=>h.hearerId===me.id).map(hitTime).sort().pop();
+  const open=S.quotes.filter(q=>!byQ[q.id]);
+  const pool=open.length?open:S.quotes;const pick=pool[Math.floor(Date.now()/600000)%pool.length];
+  let top="";
+  if(closed){const w=all[0];
+    top=`<section class="hero win"><div class="crown">♥</div><span class="eyebrow">Eindstand</span><h2>${esc(w.name)} wint het teamweekend!</h2>
+      <p class="sub">Met ${sgn(w.total)} punten. ${rank===0?"Gefeliciteerd, dat ben jij!":`Jij eindigde op plek ${rank+1} met ${sgn(sc.total)}.`}</p>
+      <div><button class="btn ghost" data-view="ranking" style="background:#fff;border:0;color:var(--club)">Bekijk de eindstand</button></div></section>`;
+    if(!S.cheered){S.cheered=true;setTimeout(()=>celebrate(true),300)}}
+  const ahead=rank>0?all[rank-1]:null;const gap=ahead?ahead.total-sc.total+1:0;
+  const target=closed?"":rank===0&&sc.total>0?`Jij staat <b>bovenaan</b>. Wie aan het eind van het weekend bovenaan staat, wint.`
+    :ahead?`Nog <b>${gap} punt${gap===1?"":"en"}</b> om ${esc(ahead.name)} in te halen voor plek ${rank}.`:"";
+  const myLast=myHits.map(hitTime).sort().pop();
   const idle=!myLast||(Date.now()-new Date(myLast))>60*60000;
-  const open=S.quotes.filter(q=>!mine[q.id]);
-  const pick=open.length?open[Math.floor(Date.now()/600000)%open.length]:null;
   let nudge="";
-  if(n===total)nudge=`<div class="nudge"><div class="ic">♥</div><p><b>Volle kaart!</b> Je hebt alles gehoord. Pas nu vooral op je eigen woorden, want elke quote die jij zegt kost een punt.</p></div>`;
-  else if(n===0)nudge=`<div class="nudge"><div class="ic">!</div><p><b>Spits je oren.</b> Tik op een quote zodra je hem hoort en pak je eerste punt. Wie zegt als eerste “${esc(pick.text)}”?</p></div>`;
-  else if(idle)nudge=`<div class="nudge"><div class="ic">!</div><p><b>Al even stil op jouw kaart.</b> Nog ${open.length} quotes te vangen. Probeer een gesprek richting “${esc(pick.text)}” te sturen…</p></div>`;
-  else if(sc.said>0)nudge=`<div class="nudge"><div class="ic">−</div><p>Je bent al <b>${sc.said}× betrapt</b>. Let op je woorden!</p></div>`;
-  v.innerHTML=`<section class="hero"><div><span class="eyebrow">Jouw kaart</span><h2>${n===total?"Volle kaart!":`${n} van ${total} gehoord`}</h2></div>
-    <div class="meter" role="progressbar" aria-valuenow="${n}" aria-valuemin="0" aria-valuemax="${total}" aria-label="Voortgang"><i style="width:${pct}%"></i>${bl.map(([k])=>`<b class="${n>=k?"got":""}" style="left:${Math.min(100,k/total*100)}%"></b>`).join("")}</div>
-    <div class="stats"><div class="stat"><b>${sc.total>0?"+":""}${sc.total}</b><span>Score</span></div><div class="stat"><b>${rank+1}<small style="font-size:.8rem;opacity:.7">/${all.length}</small></b><span>Plek</span></div><div class="stat"><b>${sc.said}</b><span>Betrapt</span></div></div>
-    <ul class="badges" aria-label="Badges">${bl.map(([k,l])=>`<li class="${n>=k?"got":""}">${n>=k?"♥ ":""}${esc(l)}</li>`).join("")}</ul></section>
+  if(!closed){
+    if(caught===0)nudge=`<div class="nudge"><div class="ic">!</div><p><b>Spits je oren.</b> Tik op een quote zodra je hem hoort en pak je eerste punt. Elke keer dat je hem hoort, telt opnieuw. Wie zegt als eerste “${esc(pick.text)}”?</p></div>`;
+    else if(idle)nudge=`<div class="nudge"><div class="ic">!</div><p><b>Al even stil op jouw kaart.</b> Elke keer dat je een quote hoort, is een punt. Probeer een gesprek richting “${esc(pick.text)}” te sturen…</p></div>`;
+    else if(distinct===total)nudge=`<div class="nudge"><div class="ic">♥</div><p><b>Volle kaart!</b> Je hebt elke quote minstens één keer gehoord. Blijf vangen, want elke keer telt.</p></div>`;
+    else if(sc.said>0)nudge=`<div class="nudge"><div class="ic">−</div><p>Je bent al <b>${sc.said}× betrapt</b>. Let op je woorden!</p></div>`;
+  }
+  v.innerHTML=`${top}<section class="hero"><div><span class="eyebrow">Jouw kaart</span><h2>${caught} keer gevangen</h2><p class="sub">${distinct} van ${total} verschillende quotes gehoord</p></div>
+    <div class="meter" role="progressbar" aria-valuenow="${distinct}" aria-valuemin="0" aria-valuemax="${total}" aria-label="Verschillende quotes gehoord"><i style="width:${Math.round(distinct/total*100)}%"></i></div>
+    <div class="stats"><div class="stat"><b>${sgn(sc.total)}</b><span>Score</span></div><div class="stat"><b>${rank+1}<small style="font-size:.8rem;opacity:.7">/${all.length}</small></b><span>Plek</span></div><div class="stat"><b>${sc.said}</b><span>Betrapt</span></div></div>
+    <ul class="badges" aria-label="Badges">${badges.map(b=>`<li class="${b.got?"got":""}">${b.got?"♥ ":""}${esc(b.l)}</li>`).join("")}</ul></section>
     ${target?`<p class="target">${target}</p>`:""}
-    ${latest?`<div class="ticker"><span class="live">LIVE</span><span><b>${esc(pName(latest.hearerId))}</b> betrapte <b>${esc(pName(latest.sayerId))}</b> op “${esc(lq?.text||"…")}” · ${esc(rel(hitTime(latest)))}</span></div>`:""}
+    ${latest?`<div class="ticker${latest.comment?" tw":""}"><span class="live">LIVE</span><div><span class="one"><b>${esc(pName(latest.hearerId))}</b> betrapte <b>${esc(pName(latest.sayerId))}</b> op “${esc(lq?.text||"…")}” · ${esc(rel(hitTime(latest)))}</span>${latest.comment?`<span class="cm">${esc(latest.comment)}</span>`:""}</div></div>`:""}
     ${nudge}
-    <div class="grid">${S.quotes.map(q=>{const h=mine[q.id];
-      return `<button class="sq${h?" hit":""}${S.justHit===`${me.id}__${q.id}`?" pop":""}${!h&&pick&&q.id===pick.id&&n<total?" hint":""}" data-q="${q.id}" ${h?`data-initials="${esc(initials(pName(h.sayerId)))}"`:""}>
-        <q>${esc(q.text)}</q><span class="meta">${h?`${esc(pName(h.sayerId))} · ${esc(fmt(h.at))}`:"Tik als je het hoort"}</span></button>`}).join("")}</div>`;
-  S.justHit=S.justHit&&S.justHit.startsWith("~")?S.justHit:S.justHit?"~"+S.justHit:null;
+    <div class="grid">${S.quotes.map(q=>{const hs=byQ[q.id];const c=hs?hs.length:0;
+      return `<button class="sq${c?" hit":""}${S.justQ===q.id?" pop":""}${!closed&&pick&&q.id===pick.id?" hint":""}" data-q="${q.id}" ${c?`data-initials="${c}×"`:""} ${closed?"disabled":""}>
+        <q>${esc(q.text)}</q><span class="meta">${c?`laatst ${esc(pName(hs[0].sayerId))} · ${esc(fmt(hs[0].at))}`:"Tik als je het hoort"}</span></button>`}).join("")}</div>`;
+  S.justQ=null;
 }
 
 function viewRanking(v){
@@ -339,8 +363,8 @@ function viewRanking(v){
   const aw=x=>(topHeard>0&&x.heard===topHeard&&uniq("heard",topHeard)?`<span class="award">Scherpste oor</span>`:"")+(topSaid>0&&x.said===topSaid&&uniq("said",topSaid)?`<span class="award said">Cliché-kampioen</span>`:"");
   const mv=(x,i)=>{const p=prevRanks[x.id];if(p==null||p===i)return"";return p>i?`<span class="mv up" title="Gestegen">▲${p-i}</span>`:`<span class="mv down" title="Gedaald">▼${i-p}</span>`};
   const pod=S.hits.length&&r.length>=3?`<div class="podium">${[1,0,2].map(i=>{const x=r[i];return `<div class="pod p${i+1}"><div class="av">${esc(initials(x.name))}</div><div class="nm">${esc(x.name)}</div><div class="blk">${x.total>0?"+":""}${x.total}<small>${i+1}e plek</small></div></div>`}).join("")}</div>`:"";
-  v.innerHTML=`<div><span class="eyebrow">Tussenstand · live</span><h2>Wie luistert het best, wie praat het meest in clichés?</h2>
-  <p class="lede">Gehoord geeft +1 per quote, zelf gezegd −1 per keer dat iemand jou betrapt. Pijltjes tonen wat er veranderd is sinds je vorige bezoek.</p></div>
+  v.innerHTML=`<div><span class="eyebrow">${S.meta&&S.meta.closed?"Eindstand":"Tussenstand · live"}</span><h2>${S.meta&&S.meta.closed?`${esc(r[0].name)} wint het teamweekend!`:"Wie luistert het best, wie praat het meest in clichés?"}</h2>
+  <p class="lede">Elke keer dat je een quote hoort: +1. Elke keer dat iemand jou betrapt: −1. Wie aan het eind van het weekend bovenaan staat, wint. Pijltjes tonen wat er veranderd is sinds je vorige bezoek.</p></div>
   ${pod}
   <div class="board" role="table">
     <div class="row head" role="row"><span>#</span><span>Speler</span><span class="num">Gehoord</span><span class="num">Gezegd</span><span class="total" style="font:inherit">Totaal</span></div>
@@ -354,12 +378,15 @@ function viewRanking(v){
 
 function viewLog(v){
   const newest=S.hits.map(hitTime).sort().pop();if(newest&&newest>logSeen){logSeen=newest;try{localStorage.setItem("qb-logseen",logSeen)}catch{};const lb=document.querySelector('nav button[data-view="log"]');if(lb)delete lb.dataset.count}
-  if(!S.hits.length){v.innerHTML=`<div class="empty"><h2>Nog niets betrapt</h2><p>Elke aangevinkte quote verschijnt hier, met wie hem zei, wie hem hoorde en wanneer.</p></div>`;return}
-  const list=[...S.hits].sort((a,b)=>String(b.at).localeCompare(String(a.at)));
+  if(!S.hits.length){v.innerHTML=`<div class="empty"><h2>Nog niets betrapt</h2><p>Elke vangst verschijnt hier, met wie de quote zei, wie hem hoorde, wanneer, en de reactie erbij.</p></div>`;return}
+  const list=[...S.hits].sort((a,b)=>String(hitTime(b)).localeCompare(String(hitTime(a))));
+  const closed=!!(S.meta&&S.meta.closed);
   v.innerHTML=`<div><span class="eyebrow">Logboek</span><h2>${list.length} keer betrapt</h2></div>
-  <ul class="log">${list.map(h=>{const q=S.quotes.find(x=>x.id===h.quoteId);
+  <ul class="log">${list.map(h=>{const q=S.quotes.find(x=>x.id===h.quoteId);const can=S.admin||(!closed&&h.uid&&h.uid===S.uid);
     return `<li><time>${esc(fmt(h.at))}</time><span class="q">“${esc(q?.text||"Verwijderde quote")}”</span>
-    <span class="s">${esc(pName(h.sayerId))} zei het, ${esc(pName(h.hearerId))} hoorde het · ${esc(rel(hitTime(h)))}</span></li>`}).join("")}</ul>`;
+    <span class="s">${esc(pName(h.sayerId))} zei het, ${esc(pName(h.hearerId))} hoorde het · ${esc(rel(hitTime(h)))}</span>
+    ${h.comment?`<span class="cm">${esc(h.comment)}</span>`:""}
+    ${can?`<button class="linkbtn" data-delh="${h.id}">Verwijder deze vangst</button>`:""}</li>`}).join("")}</ul>`;
 }
 
 function inviteLink(){return location.origin+location.pathname+"?code="+encodeURIComponent(S.code||"")}
@@ -381,42 +408,55 @@ function viewBeheer(v){
     ${S.quotes.length?`<ul class="qlist">${S.quotes.map(q=>`<li><span>“${esc(q.text)}”</span><button class="btn ghost" style="padding:4px 10px" data-delq="${q.id}">Verwijder</button></li>`).join("")}</ul>`
     :`<p class="small">Nog geen quotes. Typ ze zelf, of begin met een setje kantoorclichés:</p><div><button class="btn ghost" id="seed">12 voorbeeldquotes toevoegen</button></div>`}
   </section>
+  <section class="panel"><h2>Einde van het weekend</h2>
+    ${S.meta&&S.meta.closed?`<p class="small">Het spel is afgesloten. Iedereen ziet de winnaar en niemand kan nog afvinken.</p><div><button class="btn ghost" id="reopen">Spel heropenen</button></div>`
+    :`<p class="small">Sluit het spel af als het weekend voorbij is. Iedereen ziet dan de winnaar en de eindstand, en afvinken kan niet meer.</p><div id="close-zone"><button class="btn primary" id="close-game">Spel afsluiten en winnaar tonen</button></div>`}
+  </section>
   ${S.hits.length?`<section class="panel"><h2>Opnieuw beginnen</h2><p class="small">Wist alle ${S.hits.length} vinkjes. Spelers en quotes blijven staan.</p><div id="reset-zone"><button class="btn danger" id="reset">Alle vinkjes wissen</button></div></section>`:""}`;
 }
 
 /* ---------- tick sheet ---------- */
 function openSheet(qid){
+  if(S.meta&&S.meta.closed){toast("Het spel is afgelopen");return}
   const q=S.quotes.find(x=>x.id===qid);const me=S.me;
-  const hid=`${me}__${qid}`;const h=S.hits.find(x=>x.id===hid);const mineHit=!h||h.uid===S.uid||S.admin;
+  const prev=S.hits.filter(h=>h.hearerId===me&&h.quoteId===qid).length;
   const others=S.players.filter(p=>p.id!==me);
   const root=$("#sheet-root");
   root.innerHTML=`<div class="sheet" id="sheet"><form class="box" id="f-hit">
-    <span class="eyebrow">${h?"Al afgevinkt":"Gehoord!"}</span>
+    <span class="eyebrow">Gehoord!${prev?` · jij ving deze al ${prev}×`:""}</span>
     <blockquote>“${esc(q.text)}”</blockquote>
     ${others.length?`<div class="row2">
-      <label for="in-sayer">Wie zei het?<select id="in-sayer" required><option value="">Kies…</option>${others.map(p=>`<option value="${p.id}" ${h?.sayerId===p.id?"selected":""}>${esc(p.name)}</option>`).join("")}</select></label>
-      <label for="in-at">Wanneer?<input type="datetime-local" id="in-at" required value="${h?esc(h.at):localNow()}"></label>
-    </div>`:`<p class="err">Er staat nog niemand anders in het team. Vraag de organisator om spelers toe te voegen.</p>`}
+      <label for="in-sayer">Wie zei het?<select id="in-sayer" required><option value="">Kies…</option>${others.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></label>
+      <label for="in-at">Wanneer?<input type="datetime-local" id="in-at" required value="${localNow()}"></label>
+    </div>
+    <label for="in-comment"><span>Reactie <span class="small" style="font-weight:500">(optioneel)</span></span><textarea id="in-comment" rows="2" maxlength="140" placeholder="Bijv. Midden in de warming-up, iedereen lag dubbel"></textarea></label>`
+    :`<p class="err">Er staat nog niemand anders in het team. Vraag de organisator om spelers toe te voegen.</p>`}
     <p class="err" id="hit-err" hidden></p>
     <div class="actions">
-      ${!mineHit?`<p class="small" style="margin:0;flex-basis:100%">Deze quote is op een andere telefoon afgevinkt. Alleen die telefoon of de beheerder kan dit aanpassen.</p>`:""}${h&&mineHit?`<button type="button" class="btn danger" id="untick">Vinkje weghalen</button>`:""}
       <button type="button" class="btn ghost" id="close">Annuleren</button>
-      <button class="btn primary" ${others.length&&mineHit?"":"disabled"}>${h?"Bijwerken":"Afvinken"}</button>
+      <button class="btn primary" ${others.length?"":"disabled"}>Afvinken</button>
     </div></form></div>`;
   $("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet"||e.target.id==="close")root.innerHTML=""});
   $("#f-hit").addEventListener("submit",async e=>{e.preventDefault();
-    const sayerId=$("#in-sayer").value,at=$("#in-at").value;
+    const sayerId=$("#in-sayer").value,at=$("#in-at").value,comment=$("#in-comment").value.trim().slice(0,140);
     if(!sayerId||!at)return;
-    try{await S.db.collection("hits").doc(hid).set({quoteId:qid,hearerId:me,sayerId,at,uid:(h&&S.admin)?h.uid:S.uid,createdAt:new Date().toISOString()});
-      root.innerHTML="";
-      if(!h){const n=S.hits.filter(x=>x.hearerId===me&&x.id!==hid).length+1;const bl=badgeList(S.quotes.length);const got=bl.find(([k])=>k===n);
-        S.justHit=hid;S.known&&S.known.add(hid);
-        if(got){celebrate(true);toast(`Badge verdiend: ${got[1]}!`,"big",3600)}else{celebrate(false);toast(`+1 voor jou, −1 voor ${pName(sayerId)}`)}
-        render()}
-      else toast("Bijgewerkt")}
-    catch(err){const el=$("#hit-err");el.hidden=false;el.textContent=writeErr(err)}
+    const el=$("#hit-err");
+    if(S.hits.some(h=>h.hearerId===me&&h.quoteId===qid&&h.sayerId===sayerId&&Date.now()-new Date(h.createdAt||0)<5*60000)){
+      el.hidden=false;el.textContent=`Je hebt ${pName(sayerId)} net al op deze quote betrapt. Wacht 5 minuten voordat je hem opnieuw telt.`;return}
+    const btn=e.target.querySelector(".btn.primary");btn.disabled=true;
+    const before=S.hits.filter(h=>h.hearerId===me);const distinctBefore=new Set(before.map(h=>h.quoteId).filter(id=>S.quotes.some(x=>x.id===id))).size;
+    try{const ref=S.db.collection("hits").doc();S.known&&S.known.add(ref.id);
+      const data={quoteId:qid,hearerId:me,sayerId,at,uid:S.uid,createdAt:new Date().toISOString()};if(comment)data.comment=comment;
+      await ref.set(data);
+      root.innerHTML="";S.justQ=qid;
+      const n=before.length+1;const got=BADGES.find(([k])=>k===n);
+      const full=!prev&&distinctBefore+1===S.quotes.length;
+      if(got){celebrate(true);toast(`Badge verdiend: ${got[1]}!`,"big",3600)}
+      else if(full){celebrate(true);toast("Volle kaart! Elke quote gehoord.","big",3600)}
+      else{celebrate(false);toast(`+1 voor jou, −1 voor ${pName(sayerId)}`)}
+      render()}
+    catch(err){btn.disabled=false;el.hidden=false;el.textContent=writeErr(err)}
   });
-  const u=$("#untick");if(u)u.addEventListener("click",async()=>{try{await S.db.collection("hits").doc(hid).delete();root.innerHTML="";toast("Vinkje weggehaald")}catch(err){const el=$("#hit-err");el.hidden=false;el.textContent=writeErr(err)}});
 }
 function writeErr(err){return /not_granted|permission|denied|forbidden/i.test(String(err?.code||err?.message))?"Dit mag alleen de beheerder of de telefoon waarop het is afgevinkt.":"Opslaan lukte niet. Controleer je verbinding en probeer het opnieuw."}
 
@@ -435,6 +475,10 @@ document.addEventListener("click",async e=>{
   if(t.dataset.me){S.me=t.dataset.me;try{localStorage.setItem("qb-me",S.me)}catch{};render();return}
   if(t.dataset.q){openSheet(t.dataset.q);return}
   try{
+    if(t.dataset.delh){if(!t.dataset.armed){t.dataset.armed="1";t.textContent="Zeker weten? Tik nogmaals";return}await S.db.collection("hits").doc(t.dataset.delh).delete();toast("Vangst verwijderd");return}
+    if(t.id==="close-game"){$("#close-zone").innerHTML=`<p class="small">Weet je het zeker? De huidige koploper wordt de winnaar.</p><div class="inline"><button class="btn primary" id="close-yes">Ja, afsluiten</button><button class="btn ghost" id="reset-no">Nee</button></div>`;return}
+    if(t.id==="close-yes"){await S.db.collection("meta").doc("state").set({closed:true,closedAt:new Date().toISOString()});S.cheered=false;toast("Spel afgesloten");return}
+    if(t.id==="reopen"){await S.db.collection("meta").doc("state").set({closed:false,closedAt:""});toast("Spel heropend");return}
     if(t.dataset.delp){await S.db.collection("players").doc(t.dataset.delp).delete();return}
     if(t.dataset.delq){await S.db.collection("quotes").doc(t.dataset.delq).delete();return}
     if(t.id==="seed"){t.disabled=true;for(const [i,text] of SEED.entries())await S.db.collection("quotes").doc(slug(text)).set({text,order:i,addedAt:new Date().toISOString()});return}
@@ -475,6 +519,7 @@ async function connect(code){
   sub("players","players",(a,b)=>a.name.localeCompare(b.name));
   sub("quotes","quotes",(a,b)=>(a.order??0)-(b.order??0));
   sub("hits","hits",(a,b)=>String(a.at).localeCompare(String(b.at)));
+  S.unsubs.push(db.collection("meta").doc("state").onSnapshot(d=>{S.meta=d.exists?d.data():{};if(S.status==="ready")render()},()=>{}));
 }
 if(!window.FIREBASE_CONFIG||!FIREBASE_CONFIG.apiKey||FIREBASE_CONFIG.apiKey.startsWith("VUL")){
   $("#view").innerHTML=`<div class="notice">Firebase is nog niet ingesteld. Vul je gegevens in <b>firebase-config.js</b> in (zie README).</div>`;
