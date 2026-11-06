@@ -201,6 +201,11 @@ textarea:focus-visible{outline:2px solid var(--dauber);outline-offset:2px}
 .hero.win{background:linear-gradient(135deg,var(--dauber),var(--club));text-align:center;align-items:center}
 .hero.win h2{font-size:1.7rem}
 .hero.win .crown{font:700 2.4rem var(--display);line-height:1}
+.names{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;list-style:none;margin:0;padding:0}
+.names button,.names span.taken{width:100%;font:800 1rem var(--body);border-radius:14px;padding:14px 12px;border:2px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;text-align:center;display:block;overflow-wrap:anywhere}
+.names button:hover{border-color:var(--dauber);transform:translateY(-2px)}
+.names span.taken{opacity:.5;cursor:default;font-weight:600}
+.names span.taken small{display:block;font-size:.72rem;color:var(--muted)}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--dauber);color:#fff;padding:10px 16px;border-radius:999px;font-weight:600;z-index:30;max-width:calc(100% - 32px)}
 @media (prefers-reduced-motion:no-preference){.sq.hit::after{animation:stamp .25s ease-out}@keyframes stamp{from{transform:rotate(-12deg) scale(1.6);opacity:0}}.sq.hit::before{animation:stamp .25s ease-out}}
 </style>
@@ -225,7 +230,7 @@ textarea:focus-visible{outline:2px solid var(--dauber);outline-offset:2px}
 <div id="sheet-root"></div>
 
 <script>
-const S={meta:{},players:[],quotes:[],hits:[],me:null,view:"kaart",db:null,status:"loading",admin:false,uid:null,code:null,unsubs:[]};
+const S={claimsList:[],meta:{},players:[],quotes:[],hits:[],me:null,view:"kaart",db:null,status:"loading",admin:false,uid:null,code:null,unsubs:[]};
 const $=s=>document.querySelector(s);
 const esc=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const initials=n=>(n||"?").trim().split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase();
@@ -274,7 +279,9 @@ function scores(){
 }
 
 /* ---------- render ---------- */
+function resolveMe(){if(S.admin||S.status!=="ready")return;const c=S.claimsList.find(x=>x.uid===S.uid);S.me=c?c.id:null}
 function render(){
+  resolveMe();
   if(S.status==="ready"||S.hits.length)detectNew();
   const unread=S.hits.filter(h=>String(hitTime(h))>logSeen&&h.hearerId!==S.me).length;
   const lb=document.querySelector('nav button[data-view="log"]');if(lb){if(unread&&S.view!=="log")lb.dataset.count=unread>9?"9+":unread;else delete lb.dataset.count}
@@ -282,7 +289,7 @@ function render(){
   document.querySelectorAll("nav button").forEach(b=>{b.setAttribute("aria-selected",b.dataset.view===S.view);if(b.dataset.view==="beheer")b.hidden=!S.admin});
   $("#foot").innerHTML=S.status==="adminlogin"?"":S.admin?`<button class="linkbtn" id="admin-out">Uitloggen als beheerder</button>`:`<button class="linkbtn" id="admin-in">Inloggen als beheerder</button>`;
   const me=S.players.find(p=>p.id===S.me);
-  $("#who").innerHTML=(me?`Je speelt als <b>${esc(me.name)}</b> · <button id="switch">wissel</button>`:"")+(S.admin?`<span class="badge">Beheerder</span>`:"");
+  $("#who").innerHTML=(me?`Je speelt als <b>${esc(me.name)}</b>${S.admin?` · <button id="switch">wissel</button>`:""}`:"")+(S.admin?`<span class="badge">Beheerder</span>`:"");
   const v=$("#view");
   if(S.status==="loading"){v.innerHTML=`<p class="lede">Spelgegevens laden…</p>`;return}
   if(S.status==="offline"){v.innerHTML=`<div class="notice">De spelstand is niet bereikbaar. Controleer je internetverbinding en of de teamcode klopt.</div><div><button class="btn ghost" id="logout">Andere teamcode invoeren</button></div>`;return}
@@ -303,8 +310,24 @@ function pickMe(v){
   if(!S.players.length){
     v.innerHTML=S.admin?`<div class="empty"><h2>Nog geen spelers</h2><p>Voeg eerst het team toe onder Beheer. Daarna kiest iedereen hier zijn eigen naam.</p><button class="btn primary" data-go="beheer">Naar Beheer</button></div>`:`<div class="empty"><h2>Nog even geduld</h2><p>De organisator zet de spelers en quotes klaar. Zodra dat gebeurd is, verschijnt hier je naam.</p></div>`;return;
   }
-  v.innerHTML=`<div><h2>Wie ben jij?</h2><p class="lede">Kies je naam. Je telefoon onthoudt dit, zodat jouw vinkjes op jouw kaart komen.</p><p class="small" style="margin:0"><button class="btn ghost" id="logout" style="padding:4px 12px">Uitloggen</button></p></div>
-  <ul class="chips">${S.players.map(p=>`<li style="padding:0"><button class="btn ghost" style="border:0" data-me="${p.id}">${esc(p.name)}</button></li>`).join("")}</ul>`;
+  if(S.admin){
+    v.innerHTML=`<div><h2>Als wie speel jij?</h2><p class="lede">Als beheerder kun je vrij kiezen en later wisselen. Spelers kunnen dat niet.</p></div>
+    <ul class="names">${S.players.map(p=>`<li><button data-me="${p.id}">${esc(p.name)}</button></li>`).join("")}</ul>`;return;
+  }
+  const taken=new Set(S.claimsList.map(c=>c.id));
+  const cp=S.confirmClaim&&S.players.find(p=>p.id===S.confirmClaim);
+  if(cp&&!taken.has(cp.id)){
+    v.innerHTML=`<div class="panel"><span class="eyebrow">Bevestigen</span><h2>Ben jij ${esc(cp.name)}?</h2>
+      <p class="small">Je naam wordt gekoppeld aan deze telefoon. Daarna kun je niet meer wisselen, en kan niemand anders deze naam kiezen.</p>
+      <p class="err" id="claim-err" hidden></p>
+      <div class="inline"><button class="btn primary" id="claim-yes">Ja, ik ben ${esc(cp.name)}</button><button class="btn ghost" id="claim-no">Nee, terug</button></div></div>`;return;
+  }
+  v.innerHTML=`<div><h2>Wie ben jij?</h2><p class="lede">Kies je eigen naam. Let op: je kunt daarna niet meer wisselen.</p></div>
+  <ul class="names">${S.players.map(p=>taken.has(p.id)
+    ?`<li><span class="taken">${esc(p.name)}<small>al gekozen</small></span></li>`
+    :`<li><button data-claim="${p.id}">${esc(p.name)}</button></li>`).join("")}</ul>
+  <p class="small">Staat je naam er niet bij, of staat er "al gekozen" bij terwijl jij hem niet koos? Vraag de organisator om hulp.</p>
+  <p class="small" style="margin:0"><button class="btn ghost" id="logout" style="padding:4px 12px">Andere teamcode</button></p>`;
 }
 
 function viewKaart(v){
@@ -401,7 +424,7 @@ function viewBeheer(v){
   </section>
   <section class="panel"><h2>Spelers <span class="small">(${S.players.length})</span></h2>
     <form class="inline" id="f-player"><input id="in-player" placeholder="Naam, bijv. Sanne" maxlength="40" autocomplete="off"><button class="btn">Toevoegen</button></form>
-    ${S.players.length?`<ul class="chips">${S.players.map(p=>`<li><span>${esc(p.name)}</span><button aria-label="Verwijder ${esc(p.name)}" data-delp="${p.id}">×</button></li>`).join("")}</ul>`:`<p class="small">Nog geen spelers. Voeg iedereen toe die meedoet.</p>`}
+    ${S.players.length?`<ul class="chips">${S.players.map(p=>{const c=S.claimsList.find(x=>x.id===p.id);return `<li><span>${esc(p.name)}</span>${c?`<button class="linkbtn" style="width:auto;height:auto;border-radius:0;font-size:.75rem" data-unlink="${p.id}" title="Naam loskoppelen van de telefoon">gekoppeld · loskoppelen</button>`:`<span class="small">nog niet gekozen</span>`}<button aria-label="Verwijder ${esc(p.name)}" data-delp="${p.id}">×</button></li>`}).join("")}</ul>`:`<p class="small">Nog geen spelers. Voeg iedereen toe die meedoet.</p>`}
   </section>
   <section class="panel"><h2>Quotes op de kaart <span class="small">(${S.quotes.length})</span></h2>
     <form class="inline" id="f-quote"><input id="in-quote" placeholder="Bijv. Kunnen we dit even parkeren?" maxlength="90" autocomplete="off"><button class="btn">Toevoegen</button></form>
@@ -472,9 +495,19 @@ document.addEventListener("click",async e=>{
   if(t.id==="admin-out"){await firebase.auth().signOut();await firebase.auth().signInAnonymously();toast("Uitgelogd als beheerder");if(S.code)connect(S.code);return}
   if(t.id==="logout"){try{localStorage.removeItem("qb-code");localStorage.removeItem("qb-me")}catch{};location.reload();return}
   if(t.id==="switch"){S.me=null;try{localStorage.removeItem("qb-me")}catch{};S.view="kaart";render();return}
+  if(t.dataset.claim){S.confirmClaim=t.dataset.claim;render();return}
+  if(t.id==="claim-no"){S.confirmClaim=null;render();return}
+  if(t.id==="claim-yes"){const pid=S.confirmClaim;t.disabled=true;
+    try{const fs=S.db.firestore;const b=fs.batch();const at=new Date().toISOString();
+      b.set(S.db.collection("claims").doc(pid),{uid:S.uid,at});b.set(S.db.collection("devices").doc(S.uid),{playerId:pid,at});
+      await b.commit();S.confirmClaim=null;S.me=pid;try{localStorage.setItem("qb-me",pid)}catch{};toast(`Welkom, ${pName(pid)}!`,"big");render()}
+    catch(err){t.disabled=false;const el=$("#claim-err");if(el){el.hidden=false;el.textContent="Dat lukte niet. Misschien koos iemand anders deze naam net, of is deze telefoon al aan een naam gekoppeld. Vraag de organisator om hulp."}}
+    return}
   if(t.dataset.me){S.me=t.dataset.me;try{localStorage.setItem("qb-me",S.me)}catch{};render();return}
   if(t.dataset.q){openSheet(t.dataset.q);return}
   try{
+    if(t.dataset.unlink){if(!t.dataset.armed){t.dataset.armed="1";t.textContent="zeker? tik nogmaals";return}
+      const c=S.claimsList.find(x=>x.id===t.dataset.unlink);const b=S.db.firestore.batch();b.delete(S.db.collection("claims").doc(t.dataset.unlink));if(c&&c.uid)b.delete(S.db.collection("devices").doc(c.uid));await b.commit();toast("Naam losgekoppeld");return}
     if(t.dataset.delh){if(!t.dataset.armed){t.dataset.armed="1";t.textContent="Zeker weten? Tik nogmaals";return}await S.db.collection("hits").doc(t.dataset.delh).delete();toast("Vangst verwijderd");return}
     if(t.id==="close-game"){$("#close-zone").innerHTML=`<p class="small">Weet je het zeker? De huidige koploper wordt de winnaar.</p><div class="inline"><button class="btn primary" id="close-yes">Ja, afsluiten</button><button class="btn ghost" id="reset-no">Nee</button></div>`;return}
     if(t.id==="close-yes"){await S.db.collection("meta").doc("state").set({closed:true,closedAt:new Date().toISOString()});S.cheered=false;toast("Spel afgesloten");return}
@@ -513,12 +546,13 @@ async function connect(code){
   const sub=(name,key,sort)=>S.unsubs.push(db.collection(name).onSnapshot(snap=>{
     S[key]=snap.docs.map(d=>({id:d.id,...d.data()})).sort(sort);
     if(key==="players"&&S.me&&!S.players.some(p=>p.id===S.me)&&!snap.metadata.fromCache)S.me=null;
-    if(++loaded>=3&&S.status==="loading")S.status="ready";
+    if(++loaded>=4&&S.status==="loading")S.status="ready";
     if(S.status!=="adminlogin")render();
   },()=>{S.status="offline";render()}));
   sub("players","players",(a,b)=>a.name.localeCompare(b.name));
   sub("quotes","quotes",(a,b)=>(a.order??0)-(b.order??0));
   sub("hits","hits",(a,b)=>String(a.at).localeCompare(String(b.at)));
+  sub("claims","claimsList",()=>0);
   S.unsubs.push(db.collection("meta").doc("state").onSnapshot(d=>{S.meta=d.exists?d.data():{};if(S.status==="ready")render()},()=>{}));
 }
 if(!window.FIREBASE_CONFIG||!FIREBASE_CONFIG.apiKey||FIREBASE_CONFIG.apiKey.startsWith("VUL")){
