@@ -606,7 +606,7 @@ document.addEventListener("click",async e=>{
     if(t.dataset.unlink){if(!t.dataset.armed){t.dataset.armed="1";t.textContent="zeker? tik nogmaals";return}
       const c=S.claimsList.find(x=>x.id===t.dataset.unlink);const b=S.db.firestore.batch();b.delete(S.db.collection("claims").doc(t.dataset.unlink));if(c&&c.uid)b.delete(S.db.collection("devices").doc(c.uid));await b.commit();toast("Naam losgekoppeld");return}
     if(t.dataset.delh){if(!t.dataset.armed){t.dataset.armed="1";t.textContent="Zeker weten? Tik nogmaals";return}await S.db.collection("hits").doc(t.dataset.delh).delete();toast("Vangst verwijderd");return}
-    if(t.id==="save-afspraken"){const val=$("#in-afspraken").value.split("\n").map(x=>x.trim()).filter(Boolean).join("\n").slice(0,1500);await S.db.collection("meta").doc("state").set({...S.meta,extraRules:val});toast("Afspraken opgeslagen");return}
+    if(t.id==="save-afspraken"){const val=$("#in-afspraken").value.split("\n").map(x=>x.trim()).filter(Boolean).join("\n").slice(0,1500);await S.db.collection("meta").doc("state").set({closed:false,closedAt:"",...S.meta,extraRules:val});toast("Afspraken opgeslagen");return}
     if(t.id==="close-game"){$("#close-zone").innerHTML=`<p class="small">Weet je het zeker? De huidige koploper wordt de winnaar.</p><div class="inline"><button class="btn primary" id="close-yes">Ja, afsluiten</button><button class="btn ghost" id="reset-no">Nee</button></div>`;return}
     if(t.id==="close-yes"){await S.db.collection("meta").doc("state").set({...S.meta,closed:true,closedAt:new Date().toISOString()});S.cheered=false;toast("Spel afgesloten");return}
     if(t.id==="reopen"){await S.db.collection("meta").doc("state").set({...S.meta,closed:false,closedAt:""});toast("Spel heropend");return}
