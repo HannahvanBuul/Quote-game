@@ -371,7 +371,6 @@ function pickMe(v){
       <div class="inline"><button class="btn primary" id="claim-yes">Ja, ik ben ${esc(cp.name)}</button><button class="btn ghost" id="claim-no">Nee, terug</button></div></div>`;return;
   }
   v.innerHTML=`<div><h2>Wie ben jij?</h2><p class="lede">Kies je eigen naam. Let op: je kunt daarna niet meer wisselen.</p><p class="small" style="margin:6px 0 0"><button class="linkbtn" data-view="regels">Lees eerst de spelregels</button></p></div>
-  <div class="notice"><b>Tip:</b> wil je de game op je beginscherm zetten? Doe dat nu, en kies daarna je naam in de app op je beginscherm. Anders herkent je telefoon je daar niet.</div>
   <ul class="names">${S.players.map(p=>taken.has(p.id)
     ?`<li><span class="taken">${esc(p.name)}<small>al gekozen</small></span></li>`
     :`<li><button data-claim="${p.id}">${esc(p.name)}</button></li>`).join("")}</ul>
@@ -499,7 +498,7 @@ function viewRegels(v){
   <section><h3>Handig om te weten</h3><ul>
     <li><span>Vergissing gemaakt? Verwijder je vangst in het <b>Logboek</b>.</span></li>
     <li><span>Nieuwe telefoon, of per ongeluk de verkeerde naam gekozen? Vraag de organisator om je naam los te koppelen.</span></li>
-    <li><span>Wil je de game op je beginscherm? Doe dat dan <b>voordat</b> je je naam kiest, en kies je naam daarna in de app op je beginscherm. Een iPhone ziet die app als een aparte telefoon.</span></li></ul></section>
+    <li><span>Open de game steeds via dezelfde link in dezelfde browser, bijvoorbeeld via de groepsapp of een bladwijzer. Zo blijft je telefoon je herkennen.</span></li></ul></section>
   </div>`;
 }
 function viewBeheer(v){const k=$("#in-afspraken");const kv=k&&document.activeElement===k?k.value:null;viewBeheer0(v);if(kv!=null){const t=$("#in-afspraken");if(t){t.value=kv;t.focus()}}}
