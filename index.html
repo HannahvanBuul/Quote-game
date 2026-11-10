@@ -371,6 +371,7 @@ function pickMe(v){
       <div class="inline"><button class="btn primary" id="claim-yes">Ja, ik ben ${esc(cp.name)}</button><button class="btn ghost" id="claim-no">Nee, terug</button></div></div>`;return;
   }
   v.innerHTML=`<div><h2>Wie ben jij?</h2><p class="lede">Kies je eigen naam. Let op: je kunt daarna niet meer wisselen.</p><p class="small" style="margin:6px 0 0"><button class="linkbtn" data-view="regels">Lees eerst de spelregels</button></p></div>
+  <div class="notice"><b>Tip:</b> wil je de game op je beginscherm zetten? Doe dat nu, en kies daarna je naam in de app op je beginscherm. Anders herkent je telefoon je daar niet.</div>
   <ul class="names">${S.players.map(p=>taken.has(p.id)
     ?`<li><span class="taken">${esc(p.name)}<small>al gekozen</small></span></li>`
     :`<li><button data-claim="${p.id}">${esc(p.name)}</button></li>`).join("")}</ul>
@@ -498,7 +499,7 @@ function viewRegels(v){
   <section><h3>Handig om te weten</h3><ul>
     <li><span>Vergissing gemaakt? Verwijder je vangst in het <b>Logboek</b>.</span></li>
     <li><span>Nieuwe telefoon, of per ongeluk de verkeerde naam gekozen? Vraag de organisator om je naam los te koppelen.</span></li>
-    <li><span>Zet de link op je beginscherm, dan open je de game als een app.</span></li></ul></section>
+    <li><span>Wil je de game op je beginscherm? Doe dat dan <b>voordat</b> je je naam kiest, en kies je naam daarna in de app op je beginscherm. Een iPhone ziet die app als een aparte telefoon.</span></li></ul></section>
   </div>`;
 }
 function viewBeheer(v){const k=$("#in-afspraken");const kv=k&&document.activeElement===k?k.value:null;viewBeheer0(v);if(kv!=null){const t=$("#in-afspraken");if(t){t.value=kv;t.focus()}}}
@@ -590,7 +591,7 @@ document.addEventListener("click",async e=>{
   if(t.id==="admin-in"){S.prev=S.status;S.status="adminlogin";render();return}
   if(t.id==="admin-cancel"){S.status=S.prev||"ready";render();return}
   if(t.id==="admin-out"){await firebase.auth().signOut();await firebase.auth().signInAnonymously();toast("Uitgelogd als beheerder");if(S.code)connect(S.code);return}
-  if(t.id==="logout"){try{localStorage.removeItem("qb-code");localStorage.removeItem("qb-me")}catch{};location.reload();return}
+  if(t.id==="logout"){try{localStorage.removeItem("qb-code");localStorage.removeItem("qb-me")}catch{};codeInUrl("");location.reload();return}
   if(t.id==="switch"){S.me=null;try{localStorage.removeItem("qb-me")}catch{};S.view="kaart";render();return}
   if(t.dataset.claim){S.confirmClaim=t.dataset.claim;render();return}
   if(t.id==="claim-no"){S.confirmClaim=null;render();return}
@@ -625,7 +626,7 @@ document.addEventListener("submit",async e=>{
       if(S.code)connect(S.code);else{S.status="needcode";render()}}
     catch(err){el.hidden=false;el.textContent="Inloggen lukte niet. Controleer je e-mailadres en wachtwoord."}return}
   if(f.id==="f-code"){e.preventDefault();const c=$("#in-code").value.trim().toUpperCase().replace(/[^A-Z0-9-]/g,"");if(c.length<6){toast("Gebruik minstens 6 tekens");return}
-    try{localStorage.setItem("qb-code",c)}catch{};connect(c);return}
+    try{localStorage.setItem("qb-code",c)}catch{};codeInUrl(c);connect(c);return}
   if(f.id==="f-player"){e.preventDefault();const n=$("#in-player").value.trim();if(!n)return;
     if(S.players.some(p=>p.name.toLowerCase()===n.toLowerCase())){toast(`${n} staat er al in`);return}
     try{await S.db.collection("players").doc(slug(n)+"-"+Date.now().toString(36)).set({name:n,addedAt:new Date().toISOString()});setTimeout(()=>$("#in-player")?.focus(),50)}catch(err){toast(writeErr(err))}}
@@ -640,7 +641,9 @@ window.addEventListener("hashchange",()=>{const v=location.hash.slice(1);if(["ka
 
 setInterval(()=>{if(S.status==="ready"&&S.view!=="beheer"&&!document.querySelector("#sheet"))render()},60000);
 /* ---------- data (Firebase) ---------- */
+function codeInUrl(c){try{history.replaceState(null,"",location.pathname+(c?"?code="+encodeURIComponent(c):"")+location.hash)}catch{}}
 async function connect(code){
+  if(new URLSearchParams(location.search).get("code")!==code)codeInUrl(code);
   S.code=code;S.status="loading";S.unsubs.forEach(u=>u());S.unsubs=[];render();
   try{if(!firebase.auth().currentUser)await firebase.auth().signInAnonymously()}catch{S.status="offline";render();return}
   const db=firebase.firestore().collection("games").doc(code);
@@ -666,7 +669,7 @@ if(!window.FIREBASE_CONFIG||!FIREBASE_CONFIG.apiKey||FIREBASE_CONFIG.apiKey.star
   firebase.auth().onAuthStateChanged(u=>{
     S.admin=!!u&&!u.isAnonymous;S.uid=u?u.uid:null;
     if(!started){started=true;let code=null;try{code=localStorage.getItem("qb-code")}catch{}
-      try{const lc=new URLSearchParams(location.search).get("code");if(lc){code=lc.trim().toUpperCase().replace(/[^A-Z0-9-]/g,"");localStorage.setItem("qb-code",code);history.replaceState(null,"",location.pathname+location.hash)}}catch{}
+      try{const lc=new URLSearchParams(location.search).get("code");if(lc){code=lc.trim().toUpperCase().replace(/[^A-Z0-9-]/g,"");localStorage.setItem("qb-code",code)}}catch{}
       if(code)connect(code);else{S.status="needcode";render()}}
     else if(S.status!=="adminlogin")render();
   });
